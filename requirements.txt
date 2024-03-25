@@ -1,2 +1,4 @@
 openai
 selenium
+chromium
+chromium-driver
