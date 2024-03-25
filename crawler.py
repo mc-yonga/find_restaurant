@@ -9,7 +9,6 @@ import time
 import json
 
 openai_key = st.secrets["openai_key"]
-print(openai_key)
 client = openai.OpenAI(api_key = openai_key)
 
 def review_adjust(x):
