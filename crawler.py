@@ -13,11 +13,20 @@ client = openai.OpenAI(api_key = openai_key)
 
 def review_adjust(x):
     if isinstance(x, str):
-        x = x.replace('천','')
-        x = x.strip()
-        x = float(x) * 1000
+            x = x.replace('천','')
+            x = x.strip()
+            x = float(x) * 1000
+            return x
+    else:
+        return x
 
-    return int(x)
+def rating_adjust(x):
+    try:
+        return float(x)
+    except:
+        return 0
+
+
 
 def text_summary(text):
     assistant_id = 'asst_VXt1MgwX1BWqa4eN1zu7Qrlp'
@@ -27,7 +36,8 @@ def text_summary(text):
         thread_id=thread_id,
         role='user',
         content=""" %s \n\n\n
-        이 데이터는 구글에서 크롤링해온 맛집 데이터야, 데이터를 [{식당이름 : 호반, 종류 : 한식, 평점 : 4.3, 리뷰수 : 455, 주소 : 삼일대로 26길 20}, {식당이름 : 청진옥, 종류 : 없음, 평점 : 3.9, 리뷰수 : 3600, 주소 : 삼일대로 26길 20}] 이런식으로 정리를 하는데, 나중에 파싱할 수 있도록 데이터를 만들어줘""" % text
+        이 데이터는 구글에서 크롤링해온 맛집 데이터야, 데이터를 {식당목록 : [{식당이름 : 호반, 종류 : 한식, 평점 : 4.3, 리뷰수 : 455, 주소 : 삼일대로 26길 20}, {식당이름 : 청진옥, 종류 : 없음, 평점 : 3.9, 리뷰수 : 3600, 주소 : 삼일대로 26길 20}]} 
+        이런식으로 정리를 해줬으면 좋겠어, 참고로 인코딩 혹은 디코딩 오류가 발생할것같은 문장이나 단어는 내용에서 뺴줬으면 좋겠고, , 그리고 메인 키는 '식당목록' 이라고 해줘 """ % text
     )
 
     run = client.beta.threads.runs.create(
@@ -37,6 +47,7 @@ def text_summary(text):
 
     run_id = run.id
 
+    queued_cnt = 0
     while True:
         result = client.beta.threads.runs.retrieve(
             thread_id=thread_id,
@@ -49,15 +60,27 @@ def text_summary(text):
             break
         elif status == "in_progress":
             time.sleep(2)
+        elif status == "queued":
+            queued_cnt += 1
+            time.sleep(2)
+            if queued_cnt == 10:
+                return
+
         else:
             break
 
     thread_msg = client.beta.threads.messages.list(thread_id)
-    result = thread_msg.data[0].content[0].text.value
-    print(result)
-    result = json.loads(result)
+    result_value = thread_msg.data[0].content[0].text.value
 
-    return result
+    try:
+        result = json.loads(result_value)
+        return result
+
+    except Exception as e:
+        error = traceback.format_exc()
+        print(error)
+        print(result_value)
+        return
 
 def execute():
     st.session_state["total_restaurant_df"] = None
@@ -117,29 +140,33 @@ def execute():
             cnt += 1
             # if cnt == 4:
             #     break
-            time.sleep(2)
-
-            try:
-                summary = text_summary(text)
-                total_summary.append(summary)
-            except:
-                st.info(f'{cnt} 번 텍스트 에러발생')
-                error = traceback.format_exc()
-                st.error(error)
+            time.sleep(5)
+            print("""===== text 요약을 시작합니다 =====""")
+            summary = text_summary(text)
+            print("")
+            if summary:
+                 total_summary.append(summary)
+                 print(summary)
+                 print("===== 요약 완료 =====")
+            else:
+                print(f'{cnt} 번 텍스트 에러발생')
                 continue
-            break
+
 
     st.session_state["total_summary"] = total_summary.copy()
 
     total_df = []
     for summary in st.session_state["total_summary"]:
-        df = pd.DataFrame(summary['식당목록'])
-        total_df.append(df)
+        try:
+            df = pd.DataFrame(summary['식당목록'])
+            total_df.append(df)
+        except:
+            continue
 
     total_df = pd.concat(total_df)
     total_df.reset_index(drop = True, inplace = True)
-    total_df["평점"] = total_df["평점"].apply(lambda x : float(x))
-    total_df["리뷰수"] = total_df["리뷰수"].apply(lambda x : review_adjust(x))
+    # total_df["평점"] = total_df["평점"].apply(lambda x : rating_adjust(x))
+    # total_df["리뷰수"] = total_df["리뷰수"].apply(lambda x : review_adjust(x))
 
     st.session_state["total_restaurant_df"] = total_df
 

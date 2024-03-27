@@ -54,6 +54,8 @@ if __name__ == '__main__':
 
         if run_btn:
             df = st.session_state["total_restaurant_df"]
+            df["평점"] = df["평점"].apply(lambda x : float(x))
+            df["리뷰수"] = df["리뷰수"].apply(lambda x : float(x))
             cond = (df["종류"].isin(type_of_food_select)) & (df["평점"] >= rating) & (df["리뷰수"] >= review_amount)
             st.dataframe(df[cond])
 
